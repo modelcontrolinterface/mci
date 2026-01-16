@@ -33,11 +33,11 @@
               cargo
               rustc
               rustfmt
-              pre-commit
-              rustPackages.clippy
               openssl
+              pre-commit
               pkg-config
               cargo-watch
+              rustPackages.clippy
             ];
             RUST_SRC_PATH = rustPlatform.rustLibSrc;
           };
