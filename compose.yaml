@@ -1,0 +1,28 @@
+services:
+  db:
+    image: postgres:15
+    container_name: db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: mci
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+  mci:
+    build: .
+    container_name: mci
+    ports:
+      - "7687:7687"
+    environment:
+      MCI_DATABASE_URL: "postgres://postgres:postgres@db:5432/mci"
+    volumes:
+      - .:/app
+      - certs:/app/certs
+    depends_on:
+      - db
+
+volumes:
+  pg_data:
+  certs:
