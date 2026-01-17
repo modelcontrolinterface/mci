@@ -5,7 +5,7 @@ use serde::Deserialize;
 pub struct Config {
     pub address: String,
     pub log_level: String,
-
+    pub database_url: String,
     pub key_path: Option<String>,
     pub cert_path: Option<String>,
 }
@@ -15,9 +15,8 @@ impl Config {
         let s = config::Config::builder()
             .set_default("address", "0.0.0.0:7687")?
             .set_default("log_level", "info")?
-            .add_source(Environment::with_prefix("MCI").separator("__"))
+            .add_source(Environment::with_prefix("MCI"))
             .build()?;
-
         s.try_deserialize()
     }
 }
