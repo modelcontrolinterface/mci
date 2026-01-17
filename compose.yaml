@@ -10,6 +10,15 @@ services:
       POSTGRES_PASSWORD: postgres
     volumes:
       - pg_data:/var/lib/postgresql/data
+  s3:
+    image: chrislusf/seaweedfs
+    ports:
+      - "9333:9333"
+      - "8080:8080"
+      - "8333:8333"
+    command: server -s3
+    volumes:
+      - s3_data:/data
   mci:
     build: .
     container_name: mci
@@ -22,7 +31,9 @@ services:
       - certs:/app/certs
     depends_on:
       - db
+      - s3
 
 volumes:
   pg_data:
+  s3_data:
   certs:
