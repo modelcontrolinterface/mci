@@ -24,7 +24,11 @@ async fn main() {
         shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(30)));
     });
 
-    let (server_future, _) = serve(&config, handle).await;
+    let (server_future, addr) = serve(&config, handle)
+        .await
+        .expect("Failed to start server");
+
+    info!("Server running on {}", addr);
 
     server_future.await.expect("Server failed to run");
 }
