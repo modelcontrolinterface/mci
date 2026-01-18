@@ -26,13 +26,3 @@ thiserror = "2.0"
 tower-http = { version = "0.6", features = ["fs", "trace"] }
 config = "0.15"
 futures = "0.3"
-
-[dev-dependencies]
-http-body-util = "0.1"
-tower = { version = "0.5", features = ["full"] }
-hyper = { version = "1.8", features = ["full"] }
-mci = { path = ".", package = "mci" }
-h2 = "0.4"
-hyper-util = { version = "0.1", features = ["full"] }
-tokio-rustls = "0.26"
-rustls-pemfile = "2.1"
