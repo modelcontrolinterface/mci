@@ -5,12 +5,9 @@ use serde::Deserialize;
 pub struct Config {
     pub address: String,
     pub log_level: String,
-
     pub key_path: Option<String>,
     pub cert_path: Option<String>,
-
     pub database_url: String,
-
     pub s3_url: String,
     pub s3_access_key: String,
     pub s3_secret_key: String,
