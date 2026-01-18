@@ -34,6 +34,7 @@
               rustc
               rustfmt
               openssl
+              diesel-cli
               pre-commit
               pkg-config
               cargo-watch
