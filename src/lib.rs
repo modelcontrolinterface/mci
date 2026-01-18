@@ -1,7 +1,6 @@
 use aws_sdk_s3::Client;
 use axum::Router;
 use axum_server::{tls_rustls::RustlsConfig, Handle};
-use deadpool_postgres::Pool;
 use futures::Future;
 use std::{net::SocketAddr, path::PathBuf};
 use tower_http::trace::TraceLayer;
@@ -13,10 +12,11 @@ pub mod db;
 pub mod domains;
 pub mod errors;
 pub mod s3;
+pub mod schema;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db_pool: Pool,
+    pub db_pool: db::PgPool,
     pub s3_client: Client,
 }
 
@@ -30,46 +30,64 @@ pub fn app(app_state: AppState) -> Router {
 pub async fn serve(
     config: &config::Config,
     handle: Handle<std::net::SocketAddr>,
-) -> (impl Future<Output = Result<(), std::io::Error>>, SocketAddr) {
+) -> Result<
+    (impl Future<Output = Result<(), std::io::Error>>, SocketAddr),
+    Box<dyn std::error::Error>,
+> {
     let db_pool = db::create_pool(&config.database_url);
     let s3_client =
         s3::create_s3_client(&config.s3_url, &config.s3_access_key, &config.s3_secret_key).await;
 
-    db::init_db(&db_pool).await.unwrap();
+    let mut conn = db_pool
+        .get()
+        .map_err(|e| format!("Failed to get database connection: {}", e))?;
+
+    tokio::task::spawn_blocking(move || db::run_migrations(&mut conn))
+        .await
+        .map_err(|e| format!("Migration task panicked: {}", e))?
+        .map_err(|e| format!("Failed to run migrations: {}", e))?;
+
+    info!("Database migrations completed successfully");
 
     let app = app(AppState { db_pool, s3_client });
-    let addr: SocketAddr = config.address.parse().unwrap();
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let std_listener = listener.into_std().unwrap();
+
+    let addr: SocketAddr = config
+        .address
+        .parse()
+        .map_err(|e| format!("Invalid address '{}': {}", config.address, e))?;
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(|e| format!("Failed to bind to {}: {}", addr, e))?;
+    let actual_addr = listener.local_addr()?;
+    let std_listener = listener.into_std()?;
     let cert_path = config.cert_path.clone();
     let key_path = config.key_path.clone();
 
     let server_future = async move {
         if let (Some(cert_path), Some(key_path)) = (cert_path, key_path) {
+            info!("Starting TLS server on {}", actual_addr);
+
             let tls_config =
                 RustlsConfig::from_pem_file(PathBuf::from(cert_path), PathBuf::from(key_path))
                     .await
-                    .unwrap();
-
-            info!("Server listening on {}", addr);
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
             axum_server::from_tcp_rustls(std_listener, tls_config)
-                .unwrap()
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
                 .handle(handle)
                 .serve(app.into_make_service())
                 .await
         } else {
             warn!("TLS certificates not provided. Starting insecure HTTP server.");
-            info!("Server listening on {}", addr);
+            info!("Starting HTTP server on {}", actual_addr);
 
             axum_server::from_tcp(std_listener)
-                .unwrap()
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
                 .handle(handle)
                 .serve(app.into_make_service())
                 .await
         }
     };
 
-    (server_future, addr)
+    Ok((server_future, actual_addr))
 }
