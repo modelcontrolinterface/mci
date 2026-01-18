@@ -1,48 +1,48 @@
 {
   inputs = {
-    utils.url = "github:numtide/flake-utils";
-    naersk.url = "github:nix-community/naersk/master";
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
-
   outputs =
     {
       self,
       nixpkgs,
-      utils,
-      naersk,
+      rust-overlay,
+      flake-utils,
     }:
-    utils.lib.eachDefaultSystem (
+    flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = import nixpkgs { inherit system; };
-        naersk-lib = pkgs.callPackage naersk { };
-      in
-      {
-        defaultPackage = naersk-lib.buildPackage {
-          root = ./.;
-          buildInputs = with pkgs; [
-            openssl
-            pkg-config
+        overlays = [ (import rust-overlay) ];
+        pkgs = import nixpkgs { inherit system overlays; };
+        deps = with pkgs; [
+          openssl
+          pkg-config
+          postgresql
+        ];
+        rustVersion = pkgs.rust-bin.stable.latest.default.override {
+          extensions = [
+            "clippy"
+            "rust-src"
+            "rust-analyzer"
           ];
         };
-        devShell =
-          with pkgs;
-          mkShell {
-            buildInputs = [
-              cargo
-              rustc
-              rustfmt
-              openssl
+      in
+      {
+        devShells.default = pkgs.mkShell {
+          buildInputs =
+            deps
+            ++ (with pkgs; [
+              rustVersion
               diesel-cli
-              pre-commit
-              pkg-config
               cargo-watch
               docker-compose
-              rustPackages.clippy
-            ];
-            RUST_SRC_PATH = rustPlatform.rustLibSrc;
-          };
+            ]);
+          shellHook = ''
+            export PKG_CONFIG_PATH="${pkgs.openssl.dev}/lib/pkg-config"
+          '';
+        };
       }
     );
 }
