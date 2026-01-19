@@ -23,3 +23,11 @@ pub struct NewSpec {
     pub source_url: String,
     pub description: String,
 }
+
+#[derive(AsChangeset, Deserialize)]
+#[diesel(table_name = specs)]
+pub struct UpdateSpec {
+    pub enabled: Option<bool>,
+    pub spec_type: Option<String>,
+    pub description: Option<String>,
+}
