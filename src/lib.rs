@@ -11,8 +11,11 @@ pub mod config;
 pub mod db;
 pub mod domains;
 pub mod errors;
+pub mod models;
 pub mod s3;
 pub mod schema;
+pub mod services;
+pub mod utils;
 
 #[derive(Clone)]
 pub struct AppState {
