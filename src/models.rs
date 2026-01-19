@@ -1,7 +1,8 @@
 use diesel::prelude::*;
 use crate::schema::specs;
+use serde::{Deserialize, Serialize};
 
-#[derive(Queryable, Selectable)]
+#[derive(Queryable, Selectable, Serialize)]
 #[diesel(table_name = specs)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Spec {
@@ -13,7 +14,7 @@ pub struct Spec {
     pub description: String,
 }
 
-#[derive(Insertable)]
+#[derive(Insertable, Deserialize)]
 #[diesel(table_name = specs)]
 pub struct NewSpec {
     pub id: String,
