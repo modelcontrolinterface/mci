@@ -1,6 +1,6 @@
 use crate::{
     db::DbConnection,
-    models::{NewSpec, Spec},
+    models::{NewSpec, Spec, UpdateSpec},
     schema::specs,
 };
 use diesel::prelude::*;
@@ -44,6 +44,17 @@ pub fn list_specs(conn: &mut DbConnection, filter: SpecFilter) -> QueryResult<Ve
 pub fn create_spec(conn: &mut DbConnection, new_spec: NewSpec) -> QueryResult<Spec> {
     diesel::insert_into(specs::table)
         .values(&new_spec)
+        .returning(Spec::as_returning())
+        .get_result(conn)
+}
+
+pub fn update_spec(
+    conn: &mut DbConnection,
+    spec_id: &str,
+    update: UpdateSpec,
+) -> QueryResult<Spec> {
+    diesel::update(specs::table.find(spec_id))
+        .set(&update)
         .returning(Spec::as_returning())
         .get_result(conn)
 }
