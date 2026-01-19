@@ -1,4 +1,8 @@
-use crate::{db::DbConnection, models::Spec, schema::specs};
+use crate::{
+    db::DbConnection,
+    models::{NewSpec, Spec},
+    schema::specs,
+};
 use diesel::prelude::*;
 use serde::Deserialize;
 
@@ -35,4 +39,11 @@ pub fn list_specs(conn: &mut DbConnection, filter: SpecFilter) -> QueryResult<Ve
     }
 
     db_query.select(Spec::as_select()).load(conn)
+}
+
+pub fn create_spec(conn: &mut DbConnection, new_spec: NewSpec) -> QueryResult<Spec> {
+    diesel::insert_into(specs::table)
+        .values(&new_spec)
+        .returning(Spec::as_returning())
+        .get_result(conn)
 }
