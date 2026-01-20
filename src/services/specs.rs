@@ -58,3 +58,7 @@ pub fn update_spec(
         .returning(Spec::as_returning())
         .get_result(conn)
 }
+
+pub fn delete_spec(conn: &mut DbConnection, spec_id: &str) -> QueryResult<usize> {
+    diesel::delete(specs::table.find(spec_id)).execute(conn)
+}
