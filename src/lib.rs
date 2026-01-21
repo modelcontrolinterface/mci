@@ -9,7 +9,6 @@ use tracing::{info, warn};
 pub mod api;
 pub mod config;
 pub mod db;
-pub mod domains;
 pub mod errors;
 pub mod models;
 pub mod s3;
