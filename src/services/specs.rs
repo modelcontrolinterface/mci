@@ -62,3 +62,111 @@ pub fn update_spec(
 pub fn delete_spec(conn: &mut DbConnection, spec_id: &str) -> QueryResult<usize> {
     diesel::delete(specs::table.find(spec_id)).execute(conn)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{db::create_pool, models::NewSpec};
+    use diesel::Connection;
+
+    fn setup_test_db() -> DbConnection {
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/mci".to_string());
+        let pool = create_pool(&database_url);
+        let mut conn = pool.get().unwrap();
+
+        conn.begin_test_transaction().unwrap();
+
+        conn
+    }
+
+    #[test]
+    fn test_create_and_get_spec() {
+        let mut conn = setup_test_db();
+
+        let new_spec = NewSpec {
+            id: "test-spec".to_string(),
+            spec_url: "https://example.com/spec".to_string(),
+            spec_type: "openapi".to_string(),
+            source_url: "https://example.com".to_string(),
+            description: "Test spec".to_string(),
+        };
+
+        let created = create_spec(&mut conn, new_spec).unwrap();
+        assert_eq!(created.id, "test-spec");
+
+        let retrieved = get_spec(&mut conn, "test-spec").unwrap();
+        assert_eq!(retrieved.id, created.id);
+    }
+
+    #[test]
+    fn test_list_specs_with_filter() {
+        let mut conn = setup_test_db();
+
+        let spec1 = NewSpec {
+            id: "spec-1".to_string(),
+            spec_url: "https://example.com/1".to_string(),
+            spec_type: "openapi".to_string(),
+            source_url: "https://example.com".to_string(),
+            description: "First spec".to_string(),
+        };
+
+        create_spec(&mut conn, spec1).unwrap();
+
+        let filter = SpecFilter {
+            query: Some("First".to_string()),
+            enabled: None,
+            spec_type: None,
+        };
+        let results = list_specs(&mut conn, filter).unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "spec-1");
+    }
+
+    #[test]
+    fn test_update_spec() {
+        let mut conn = setup_test_db();
+
+        let new_spec = NewSpec {
+            id: "update-test".to_string(),
+            spec_url: "https://example.com/spec".to_string(),
+            spec_type: "openapi".to_string(),
+            source_url: "https://example.com".to_string(),
+            description: "Original".to_string(),
+        };
+
+        create_spec(&mut conn, new_spec).unwrap();
+
+        let update = UpdateSpec {
+            enabled: Some(false),
+            spec_type: None,
+            description: Some("Updated".to_string()),
+        };
+        let updated = update_spec(&mut conn, "update-test", update).unwrap();
+
+        assert_eq!(updated.enabled, false);
+        assert_eq!(updated.description, "Updated");
+    }
+
+    #[test]
+    fn test_delete_spec() {
+        let mut conn = setup_test_db();
+
+        let new_spec = NewSpec {
+            id: "delete-test".to_string(),
+            spec_url: "https://example.com/spec".to_string(),
+            spec_type: "openapi".to_string(),
+            source_url: "https://example.com".to_string(),
+            description: "To be deleted".to_string(),
+        };
+
+        create_spec(&mut conn, new_spec).unwrap();
+
+        let deleted = delete_spec(&mut conn, "delete-test").unwrap();
+        assert_eq!(deleted, 1);
+
+        let result = get_spec(&mut conn, "delete-test");
+        assert!(result.is_err());
+    }
+}
