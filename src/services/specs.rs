@@ -147,7 +147,7 @@ mod tests {
         };
         let updated = update_spec(&mut conn, "test-update", update).unwrap();
 
-        assert_eq!(updated.enabled, false);
+        assert!(!updated.enabled);
         assert_eq!(updated.description, "Updated");
     }
 
