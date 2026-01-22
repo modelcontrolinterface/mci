@@ -72,7 +72,7 @@ pub async fn delete_spec(
 
 #[cfg(test)]
 mod tests {
-    use crate::{app, AppState};
+    use crate::AppState;
     use crate::{db, s3};
     use axum::{
         body::Body,
@@ -81,10 +81,24 @@ mod tests {
     };
     use serde_json::json;
     use tower::ServiceExt;
+    use diesel::{Connection, RunQueryDsl};
 
     async fn setup_test_app() -> Router {
         let database_url = std::env::var("TEST_DATABASE_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/mci".to_string());
+        let mut root_conn = diesel::PgConnection::establish(
+            &database_url.replace("/mci", "/postgres"),
+        )
+        .expect("Failed to connect to postgres database to setup test db");
+
+        let db_name = "mci";
+        diesel::sql_query(format!("DROP DATABASE IF EXISTS {}", db_name))
+            .execute(&mut root_conn)
+            .expect("Failed to drop test database");
+        diesel::sql_query(format!("CREATE DATABASE {}", db_name))
+            .execute(&mut root_conn)
+            .expect("Failed to create test database");
+
         let pool = db::create_pool(&database_url);
         let mut conn = pool
             .get()

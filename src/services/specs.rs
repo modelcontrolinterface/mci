@@ -66,14 +66,16 @@ pub fn delete_spec(conn: &mut DbConnection, spec_id: &str) -> QueryResult<usize>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{db::create_pool, models::NewSpec};
+    use crate::{db, models::NewSpec};
     use diesel::Connection;
 
     fn setup_test_db() -> DbConnection {
         let database_url = std::env::var("TEST_DATABASE_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/mci".to_string());
-        let pool = create_pool(&database_url);
+        let pool = db::create_pool(&database_url);
         let mut conn = pool.get().unwrap();
+
+        db::run_migrations(&mut conn).expect("Failed to run migrations for test database");
 
         conn.begin_test_transaction().unwrap();
 
@@ -85,7 +87,7 @@ mod tests {
         let mut conn = setup_test_db();
 
         let new_spec = NewSpec {
-            id: "test-spec".to_string(),
+            id: "test-create-and-get".to_string(),
             spec_url: "https://example.com/spec".to_string(),
             spec_type: "openapi".to_string(),
             source_url: "https://example.com".to_string(),
@@ -93,9 +95,9 @@ mod tests {
         };
 
         let created = create_spec(&mut conn, new_spec).unwrap();
-        assert_eq!(created.id, "test-spec");
+        assert_eq!(created.id, "test-create-and-get");
 
-        let retrieved = get_spec(&mut conn, "test-spec").unwrap();
+        let retrieved = get_spec(&mut conn, "test-create-and-get").unwrap();
         assert_eq!(retrieved.id, created.id);
     }
 
@@ -104,7 +106,7 @@ mod tests {
         let mut conn = setup_test_db();
 
         let spec1 = NewSpec {
-            id: "spec-1".to_string(),
+            id: "spec-list-1".to_string(),
             spec_url: "https://example.com/1".to_string(),
             spec_type: "openapi".to_string(),
             source_url: "https://example.com".to_string(),
@@ -121,7 +123,7 @@ mod tests {
         let results = list_specs(&mut conn, filter).unwrap();
 
         assert_eq!(results.len(), 1);
-        assert_eq!(results[0].id, "spec-1");
+        assert_eq!(results[0].id, "spec-list-1");
     }
 
     #[test]
@@ -129,7 +131,7 @@ mod tests {
         let mut conn = setup_test_db();
 
         let new_spec = NewSpec {
-            id: "update-test".to_string(),
+            id: "test-update".to_string(),
             spec_url: "https://example.com/spec".to_string(),
             spec_type: "openapi".to_string(),
             source_url: "https://example.com".to_string(),
@@ -143,7 +145,7 @@ mod tests {
             spec_type: None,
             description: Some("Updated".to_string()),
         };
-        let updated = update_spec(&mut conn, "update-test", update).unwrap();
+        let updated = update_spec(&mut conn, "test-update", update).unwrap();
 
         assert_eq!(updated.enabled, false);
         assert_eq!(updated.description, "Updated");
@@ -154,7 +156,7 @@ mod tests {
         let mut conn = setup_test_db();
 
         let new_spec = NewSpec {
-            id: "delete-test".to_string(),
+            id: "test-delete".to_string(),
             spec_url: "https://example.com/spec".to_string(),
             spec_type: "openapi".to_string(),
             source_url: "https://example.com".to_string(),
@@ -163,10 +165,10 @@ mod tests {
 
         create_spec(&mut conn, new_spec).unwrap();
 
-        let deleted = delete_spec(&mut conn, "delete-test").unwrap();
+        let deleted = delete_spec(&mut conn, "test-delete").unwrap();
         assert_eq!(deleted, 1);
 
-        let result = get_spec(&mut conn, "delete-test");
+        let result = get_spec(&mut conn, "test-delete");
         assert!(result.is_err());
     }
 }
