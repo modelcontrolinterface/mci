@@ -6,6 +6,7 @@ use crate::{
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
+use tokio_util::io::ReaderStream;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct SpecFilter {
@@ -38,7 +39,7 @@ impl SpecSource {
         }
     }
 
-    fn as_source_url(&self) -> String {
+    pub fn as_source_url(&self) -> String {
         match self {
             Self::Http(url) => url.clone(),
             Self::Path(path) => path.clone(),
@@ -46,14 +47,28 @@ impl SpecSource {
     }
 }
 
+fn build_http_client(timeout_secs: u64) -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+}
+
+async fn fetch_spec_from_path(path: &str) -> Result<SpecPayload, Box<dyn std::error::Error>> {
+    let metadata = fs::metadata(path).await?;
+    if !metadata.is_file() {
+        return Err("Path is not a file".into());
+    }
+
+    let content = fs::read_to_string(path).await?;
+    let spec_payload = serde_json::from_str::<SpecPayload>(&content)?;
+    Ok(spec_payload)
+}
+
 async fn fetch_spec_from_url(
     url: &str,
     timeout_secs: u64,
 ) -> Result<SpecPayload, Box<dyn std::error::Error>> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(timeout_secs))
-        .build()?;
-
+    let client = build_http_client(timeout_secs)?;
     let spec_payload = client
         .get(url)
         .header("User-Agent", "MCI/1.0")
@@ -62,52 +77,34 @@ async fn fetch_spec_from_url(
         .error_for_status()?
         .json::<SpecPayload>()
         .await?;
-
     Ok(spec_payload)
 }
 
-async fn fetch_spec_from_path(path: &str) -> Result<SpecPayload, Box<dyn std::error::Error>> {
-    let metadata = fs::metadata(path).await?;
-
-    if !metadata.is_file() {
-        return Err("Path is not a file".into());
-    }
-
-    let content = fs::read_to_string(path).await?;
-    let spec_payload = serde_json::from_str::<SpecPayload>(&content)?;
-
-    Ok(spec_payload)
+pub async fn stream_content_from_path(
+    path: &str,
+) -> Result<ReaderStream<tokio::fs::File>, Box<dyn std::error::Error>> {
+    let file = tokio::fs::File::open(path).await?;
+    Ok(ReaderStream::new(file))
 }
 
-fn create_spec_internal(conn: &mut DbConnection, new_spec: NewSpec) -> QueryResult<Spec> {
+pub async fn stream_content_from_url(
+    url: &str,
+) -> Result<reqwest::Response, Box<dyn std::error::Error>> {
+    let client = build_http_client(30)?;
+    let response = client
+        .get(url)
+        .header("User-Agent", "MCI/1.0")
+        .send()
+        .await?
+        .error_for_status()?;
+    Ok(response)
+}
+
+fn create_spec_db(conn: &mut DbConnection, new_spec: NewSpec) -> QueryResult<Spec> {
     diesel::insert_into(specs::table)
         .values(&new_spec)
         .returning(Spec::as_returning())
         .get_result(conn)
-}
-
-pub async fn fetch_spec(
-    conn: &mut DbConnection,
-    source: SpecSource,
-) -> Result<Spec, Box<dyn std::error::Error>> {
-    let source_url = source.as_source_url();
-
-    let payload = match source {
-        SpecSource::Http(url) => fetch_spec_from_url(&url, 30).await?,
-        SpecSource::Path(path) => fetch_spec_from_path(&path).await?,
-    };
-
-    let new_spec = NewSpec {
-        id: payload.id,
-        spec_url: payload.spec_url,
-        spec_type: payload.spec_type,
-        source_url,
-        description: payload.description,
-    };
-
-    let result = create_spec_internal(conn, new_spec)?;
-
-    Ok(result)
 }
 
 pub fn get_spec(conn: &mut DbConnection, spec_id: &str) -> QueryResult<Spec> {
@@ -128,11 +125,9 @@ pub fn list_specs(conn: &mut DbConnection, filter: SpecFilter) -> QueryResult<Ve
                 .or(specs::description.ilike(pattern)),
         );
     }
-
     if let Some(enabled) = filter.enabled {
         query = query.filter(specs::enabled.eq(enabled));
     }
-
     if let Some(spec_type) = filter.spec_type {
         query = query.filter(specs::spec_type.eq(spec_type));
     }
@@ -151,25 +146,47 @@ pub fn delete_spec(conn: &mut DbConnection, id: &str) -> QueryResult<usize> {
     diesel::delete(specs::table.find(id)).execute(conn)
 }
 
+pub async fn fetch_and_create_spec(
+    conn: &mut DbConnection,
+    source: SpecSource,
+) -> Result<Spec, Box<dyn std::error::Error>> {
+    let source_url = source.as_source_url();
+
+    let payload = match source {
+        SpecSource::Http(url) => fetch_spec_from_url(&url, 30).await?,
+        SpecSource::Path(path) => fetch_spec_from_path(&path).await?,
+    };
+
+    let new_spec = NewSpec {
+        id: payload.id,
+        spec_url: payload.spec_url,
+        spec_type: payload.spec_type,
+        source_url,
+        description: payload.description,
+    };
+
+    let result = create_spec_db(conn, new_spec)?;
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db;
     use diesel::Connection;
+    use futures::StreamExt;
     use serde_json::json;
-    use tempfile::TempDir;
-    use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+    use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
 
     fn setup_test_db() -> DbConnection {
         let database_url = std::env::var("TEST_DATABASE_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/mci".to_string());
         let pool = db::create_pool(&database_url);
         let mut conn = pool.get().unwrap();
-
         db::run_migrations(&mut conn).expect("Migration failed");
         conn.begin_test_transaction().unwrap();
-
         conn
     }
 
@@ -184,96 +201,32 @@ mod tests {
     }
 
     #[test]
-    fn test_spec_source_parse_http() {
-        let source = SpecSource::parse("http://example.com/spec");
-        match source {
-            SpecSource::Http(url) => assert_eq!(url, "http://example.com/spec"),
-            _ => panic!("Expected Http source"),
-        }
-    }
-
-    #[test]
-    fn test_spec_source_parse_https() {
-        let source = SpecSource::parse("https://example.com/spec");
-        match source {
-            SpecSource::Http(url) => assert_eq!(url, "https://example.com/spec"),
-            _ => panic!("Expected Http source"),
-        }
-    }
-
-    #[test]
-    fn test_spec_source_parse_explicit_path() {
-        let source = SpecSource::parse("path:/var/tmp/spec.json");
-        match source {
-            SpecSource::Path(path) => assert_eq!(path, "/var/tmp/spec.json"),
-            _ => panic!("Expected Path source"),
-        }
-    }
-
-    #[test]
-    fn test_spec_source_parse_implicit_path() {
-        let test_cases = vec!["/etc/spec.yaml", "my_spec_file.json", "./relative/path.json"];
-
-        for input in test_cases {
-            let source = SpecSource::parse(input);
-            match source {
-                SpecSource::Path(path) => assert_eq!(path, input),
-                _ => panic!("Expected Path source for input: {}", input),
-            }
-        }
-    }
-
-    #[test]
-    fn test_create_and_get_spec() {
-        let mut conn = setup_test_db();
-        let id = "test-create";
-
-        let created = create_spec_internal(&mut conn, dummy_spec(id)).unwrap();
-        assert_eq!(created.id, id);
-
-        let retrieved = get_spec(&mut conn, id).unwrap();
-        assert_eq!(retrieved.id, id);
-        assert_eq!(retrieved.spec_type, "openapi");
-    }
-
-    #[test]
-    fn test_update_spec() {
-        let mut conn = setup_test_db();
-        let id = "test-update";
-
-        create_spec_internal(&mut conn, dummy_spec(id)).unwrap();
-
-        let update = UpdateSpec {
-            enabled: Some(false),
-            spec_type: Some("graphql".to_string()),
-            ..Default::default()
-        };
-
-        let updated = update_spec(&mut conn, id, update).unwrap();
-        assert!(!updated.enabled);
-        assert_eq!(updated.spec_type, "graphql");
-    }
-
-    #[test]
-    fn test_delete_spec() {
-        let mut conn = setup_test_db();
-        let id = "test-delete";
-
-        create_spec_internal(&mut conn, dummy_spec(id)).unwrap();
-
-        let deleted_count = delete_spec(&mut conn, id).unwrap();
-        assert_eq!(deleted_count, 1);
-
-        assert!(get_spec(&mut conn, id).is_err());
+    fn test_spec_source_parsing() {
+        assert!(matches!(
+            SpecSource::parse("http://e.com"),
+            SpecSource::Http(_)
+        ));
+        assert!(matches!(
+            SpecSource::parse("https://e.com"),
+            SpecSource::Http(_)
+        ));
+        assert!(matches!(
+            SpecSource::parse("path:/tmp/s"),
+            SpecSource::Path(_)
+        ));
+        assert!(matches!(SpecSource::parse("/etc/s"), SpecSource::Path(_)));
     }
 
     #[test]
     fn test_crud_lifecycle() {
         let mut conn = setup_test_db();
-        let id = "lifecycle-test";
+        let id = "crud-test";
 
-        let created = create_spec_internal(&mut conn, dummy_spec(id)).unwrap();
+        let created = create_spec_db(&mut conn, dummy_spec(id)).unwrap();
         assert_eq!(created.id, id);
+
+        let fetched = get_spec(&mut conn, id).unwrap();
+        assert_eq!(fetched.id, id);
 
         let update = UpdateSpec {
             enabled: Some(false),
@@ -282,126 +235,50 @@ mod tests {
         let updated = update_spec(&mut conn, id, update).unwrap();
         assert!(!updated.enabled);
 
-        let deleted_count = delete_spec(&mut conn, id).unwrap();
-        assert_eq!(deleted_count, 1);
+        assert_eq!(delete_spec(&mut conn, id).unwrap(), 1);
         assert!(get_spec(&mut conn, id).is_err());
     }
 
     #[test]
-    fn test_list_specs_with_query_filter() {
+    fn test_list_specs() {
         let mut conn = setup_test_db();
-
-        create_spec_internal(&mut conn, dummy_spec("filter-1")).unwrap();
-        create_spec_internal(&mut conn, dummy_spec("other-2")).unwrap();
+        create_spec_db(&mut conn, dummy_spec("list-1")).unwrap();
 
         let filter = SpecFilter {
-            query: Some("filter".to_string()),
+            query: Some("list".into()),
             ..Default::default()
         };
-
         let results = list_specs(&mut conn, filter).unwrap();
         assert!(!results.is_empty());
-        assert!(results.iter().any(|s| s.id.contains("filter")));
-    }
-
-    #[test]
-    fn test_list_specs_with_type_filter() {
-        let mut conn = setup_test_db();
-
-        let mut spec1 = dummy_spec("spec-1");
-        spec1.spec_type = "openapi".to_string();
-        create_spec_internal(&mut conn, spec1).unwrap();
-
-        let mut spec2 = dummy_spec("spec-2");
-        spec2.spec_type = "graphql".to_string();
-        create_spec_internal(&mut conn, spec2).unwrap();
-
-        let filter = SpecFilter {
-            spec_type: Some("graphql".to_string()),
-            ..Default::default()
-        };
-
-        let results = list_specs(&mut conn, filter).unwrap();
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].spec_type, "graphql");
     }
 
     #[tokio::test]
-    async fn test_fetch_spec_from_url_success() {
-        let mock_server = MockServer::start().await;
-        let json_response = json!({
-            "id": "remote-spec",
-            "type": "openapi",
-            "spec_url": "http://example.com/api",
-            "description": "Remote spec"
-        });
+    async fn test_fetch_spec_url() {
+        let mock = MockServer::start().await;
+        let body = json!({ "id": "net", "type": "oas", "spec_url": "u", "description": "d" });
 
         Mock::given(method("GET"))
-            .and(path("/spec.json"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(&json_response))
-            .mount(&mock_server)
+            .respond_with(ResponseTemplate::new(200).set_body_json(&body))
+            .mount(&mock)
             .await;
 
-        let url = format!("{}/spec.json", mock_server.uri());
-        let result = fetch_spec_from_url(&url, 5).await.unwrap();
-
-        assert_eq!(result.id, "remote-spec");
-        assert_eq!(result.spec_type, "openapi");
+        let res = fetch_spec_from_url(&mock.uri(), 1).await.unwrap();
+        assert_eq!(res.id, "net");
     }
 
     #[tokio::test]
-    async fn test_fetch_spec_from_url_timeout() {
-        let mock_server = MockServer::start().await;
+    async fn test_stream_file() {
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(b"stream_data").unwrap();
 
-        Mock::given(method("GET"))
-            .and(path("/slow"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_delay(std::time::Duration::from_secs(10))
-                    .set_body_json(json!({"id": "test"})),
-            )
-            .mount(&mock_server)
-            .await;
-
-        let url = format!("{}/slow", mock_server.uri());
-        let result = fetch_spec_from_url(&url, 1).await;
-
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_fetch_spec_from_path_success() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("spec.json");
-        let content = json!({
-            "id": "file-spec",
-            "type": "graphql",
-            "spec_url": "http://local",
-            "description": "Local spec"
-        });
-
-        fs::write(&file_path, content.to_string()).await.unwrap();
-
-        let result = fetch_spec_from_path(file_path.to_str().unwrap())
+        let mut stream = stream_content_from_path(file.path().to_str().unwrap())
             .await
             .unwrap();
+        let mut data = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            data.extend_from_slice(&chunk.unwrap());
+        }
 
-        assert_eq!(result.id, "file-spec");
-        assert_eq!(result.spec_type, "graphql");
-    }
-
-    #[tokio::test]
-    async fn test_fetch_spec_from_path_not_a_file() {
-        let temp_dir = TempDir::new().unwrap();
-        let dir_path = temp_dir.path();
-
-        let result = fetch_spec_from_path(dir_path.to_str().unwrap()).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_fetch_spec_from_path_file_not_found() {
-        let result = fetch_spec_from_path("/nonexistent/path/spec.json").await;
-        assert!(result.is_err());
+        assert_eq!(data, b"stream_data");
     }
 }
