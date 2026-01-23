@@ -37,7 +37,7 @@ pub struct NewSpec {
     pub description: String,
 }
 
-#[derive(AsChangeset, Deserialize, Validate, Debug)]
+#[derive(AsChangeset, Default, Deserialize, Validate, Debug)]
 #[diesel(table_name = specs)]
 pub struct UpdateSpec {
     pub enabled: Option<bool>,

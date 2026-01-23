@@ -28,6 +28,9 @@ config = "0.15"
 futures = "0.3"
 validator = { version = "0.20", features = ["derive"] }
 regex = "1.12"
+reqwest = { version = "0.12", features = ["json"] }
 
 [dev-dependencies]
 tower = "0.5"
+wiremock = "0.6"
+tempfile = "3.24"
