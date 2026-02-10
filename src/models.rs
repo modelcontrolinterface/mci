@@ -40,11 +40,11 @@ fn validate_digest(digest: &str) -> Result<(), ValidationError> {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Definition {
     pub id: String,
-    pub definition_type: String,
+    pub r#type: String,
     pub is_enabled: bool,
     pub name: String,
     pub description: String,
-    pub definition_file: String,
+    pub file_ref: String,
     pub digest: String,
     pub source_url: Option<String>,
 }
@@ -56,10 +56,9 @@ pub struct NewDefinition {
     pub id: String,
 
     #[validate(length(min = 3, max=64), regex(path = *TYPE_IDENTIFIER_REGEX))]
-    pub definition_type: String,
+    pub r#type: String,
 
-    #[validate(url)]
-    pub definition_file: String,
+    pub file_ref: String,
 
     #[validate(length(min = 3, max = 64))]
     pub name: String,
@@ -80,7 +79,7 @@ pub struct UpdateDefinition {
     pub is_enabled: Option<bool>,
 
     #[validate(length(min = 3, max=64), regex(path = *TYPE_IDENTIFIER_REGEX))]
-    pub definition_type: Option<String>,
+    pub r#type: Option<String>,
 
     #[validate(length(min = 3, max = 64))]
     pub name: String,

@@ -4,14 +4,15 @@ diesel::table! {
     definitions (id) {
         #[max_length = 64]
         id -> Varchar,
+        #[sql_name = "type"]
         #[max_length = 64]
-        definition_type -> Varchar,
+        type_ -> Varchar,
         is_enabled -> Bool,
         #[max_length = 64]
         name -> Varchar,
         #[max_length = 500]
         description -> Varchar,
-        definition_file -> Text,
+        file_ref -> Text,
         digest -> Text,
         source_url -> Nullable<Text>,
     }
