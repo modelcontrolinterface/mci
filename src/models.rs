@@ -16,7 +16,7 @@ pub struct Definition {
     pub name: String,
     pub description: String,
     pub definition_file: String,
-    pub source_url: String,
+    pub source_url: Option<String>,
 }
 
 #[derive(Insertable, Deserialize, Validate, Debug)]
@@ -38,7 +38,7 @@ pub struct NewDefinition {
     pub description: String,
 
     #[validate(url)]
-    pub source_url: String,
+    pub source_url: Option<String>,
 }
 
 #[derive(AsChangeset, Default, Deserialize, Validate, Debug)]
@@ -56,5 +56,5 @@ pub struct UpdateDefinition {
     pub description: String,
 
     #[validate(url)]
-    pub source_url: String,
+    pub source_url: Option<String>,
 }

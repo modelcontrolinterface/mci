@@ -11,6 +11,6 @@ diesel::table! {
         #[max_length = 500]
         description -> Varchar,
         definition_file -> Text,
-        source_url -> Text,
+        source_url -> Nullable<Text>,
     }
 }

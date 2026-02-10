@@ -5,7 +5,7 @@ CREATE TABLE definitions (
     name TEXT NOT NULL,
     description VARCHAR(500) NOT NULL,
     definition_file TEXT NOT NULL,
-    source_url TEXT NOT NULL
+    source_url TEXT
 );
 
 CREATE INDEX idx_definitions_type ON definitions(definition_type);
