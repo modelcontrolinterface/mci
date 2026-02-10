@@ -7,9 +7,10 @@ diesel::table! {
         #[max_length = 64]
         definition_type -> Varchar,
         enabled -> Bool,
-        definition_url -> Text,
-        source_url -> Text,
+        name -> Text,
         #[max_length = 500]
         description -> Varchar,
+        definition_file -> Text,
+        source_url -> Text,
     }
 }
