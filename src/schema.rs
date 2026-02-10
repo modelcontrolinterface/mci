@@ -6,7 +6,7 @@ diesel::table! {
         id -> Varchar,
         #[max_length = 64]
         definition_type -> Varchar,
-        enabled -> Bool,
+        is_enabled -> Bool,
         name -> Text,
         #[max_length = 500]
         description -> Varchar,
