@@ -7,6 +7,9 @@ pub static NAMESPACE_ID_REGEX: LazyLock<Regex> =
 pub static TYPE_IDENTIFIER_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_-]+$").unwrap());
 
+pub static SHA256_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-f0-9]{64}$").unwrap());
+
 #[cfg(test)]
 mod tests {
     use super::*;
