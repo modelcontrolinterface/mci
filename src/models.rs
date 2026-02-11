@@ -1,20 +1,18 @@
 use crate::{
     schema::definitions,
-    utils::regex::{NAMESPACE_ID_REGEX, TYPE_IDENTIFIER_REGEX, SHA256_REGEX},
+    utils::regex_utils::{NAMESPACE_ID_REGEX, SHA256_REGEX, TYPE_IDENTIFIER_REGEX},
 };
-use std::borrow::Cow;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use validator::{Validate, ValidationError};
 
 fn validate_digest(digest: &str) -> Result<(), ValidationError> {
-    let (algorithm, hash) = digest
-        .split_once(':')
-        .ok_or_else(|| {
-            let mut error = ValidationError::new("invalid_digest_format");
-            error.add_param(Cow::from("value"), &digest);
-            error
-        })?;
+    let (algorithm, hash) = digest.split_once(':').ok_or_else(|| {
+        let mut error = ValidationError::new("invalid_digest_format");
+        error.add_param(Cow::from("value"), &digest);
+        error
+    })?;
     let hash_regex = match algorithm {
         "sha256" => &SHA256_REGEX,
         _ => {
@@ -40,7 +38,7 @@ fn validate_digest(digest: &str) -> Result<(), ValidationError> {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Definition {
     pub id: String,
-    pub r#type: String,
+    pub type_: String,
     pub is_enabled: bool,
     pub name: String,
     pub description: String,
@@ -56,7 +54,7 @@ pub struct NewDefinition {
     pub id: String,
 
     #[validate(length(min = 3, max=64), regex(path = *TYPE_IDENTIFIER_REGEX))]
-    pub r#type: String,
+    pub type_: String,
 
     pub file_ref: String,
 
@@ -79,7 +77,7 @@ pub struct UpdateDefinition {
     pub is_enabled: Option<bool>,
 
     #[validate(length(min = 3, max=64), regex(path = *TYPE_IDENTIFIER_REGEX))]
-    pub r#type: Option<String>,
+    pub type_: Option<String>,
 
     #[validate(length(min = 3, max = 64))]
     pub name: String,
