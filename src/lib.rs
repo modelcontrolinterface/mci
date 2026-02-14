@@ -41,7 +41,13 @@ pub async fn serve(
 > {
     let db_pool = db::create_pool(&config.database_url);
     let http_client = http::create_client(30)?;
-    let s3_client = s3::create_client(&config.s3_url, &config.s3_access_key, &config.s3_secret_key, &config.s3_region).await;
+    let s3_client = s3::create_client(
+        &config.s3_url,
+        &config.s3_access_key,
+        &config.s3_secret_key,
+        &config.s3_region,
+    )
+    .await;
 
     let app = app(AppState {
         db_pool,
