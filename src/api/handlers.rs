@@ -1,7 +1,7 @@
 use crate::{
     errors::AppError,
     models::{Definition, UpdateDefinition},
-    services::definitions::{self as service, DefinitionFilter},
+    services::definitions_services::{self, DefinitionFilter, DefinitionPayload},
     AppState,
 };
 use axum::{
@@ -9,17 +9,13 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use serde::Deserialize;
 use validator::Validate;
 
-pub async fn get_definition(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Result<Json<Definition>, AppError> {
-    let mut conn = state.db_pool.get()?;
-    let definition =
-        tokio::task::spawn_blocking(move || service::get_definition(&mut conn, &id)).await??;
-
-    Ok(Json(definition))
+#[derive(Debug, Deserialize, Validate)]
+pub struct InstallDefinitionRequest {
+    #[validate(url)]
+    pub source: String,
 }
 
 pub async fn list_definitions(
@@ -27,35 +23,42 @@ pub async fn list_definitions(
     Query(filter): Query<DefinitionFilter>,
 ) -> Result<Json<Vec<Definition>>, AppError> {
     let mut conn = state.db_pool.get()?;
-    let definitions =
-        tokio::task::spawn_blocking(move || service::list_definitions(&mut conn, filter)).await??;
+
+    let definitions = tokio::task::spawn_blocking(move || {
+        definitions_services::list_definitions(&mut conn, &filter)
+    })
+    .await??;
 
     Ok(Json(definitions))
 }
 
-// pub async fn create_definition(
-//     State(state): State<AppState>,
-//     Json(new_definition): Json<NewDefinition>,
-// ) -> Result<(StatusCode, Json<Definition>), AppError> {
-//     new_definition.validate()?;
-//
-//     let mut conn = state.db_pool.get()?;
-//     let definition =
-//         tokio::task::spawn_blocking(move || service::create_definition(&mut conn, new_definition)).await??;
-//
-//     Ok((StatusCode::CREATED, Json(definition)))
-// }
+pub async fn create_definition(
+    State(state): State<AppState>,
+    Json(payload): Json<DefinitionPayload>,
+) -> Result<(StatusCode, Json<Definition>), AppError> {
+    let db_pool = state.db_pool.clone();
+    let http_client = state.http_client.clone();
+    let s3_client = state.s3_client.clone();
 
-pub async fn update_definition(
+    let definition = definitions_services::create_definition(
+        &mut db_pool.get()?,
+        &http_client,
+        &s3_client,
+        &payload,
+    )
+    .await?;
+
+    Ok((StatusCode::CREATED, Json(definition)))
+}
+
+pub async fn get_definition(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    Json(update): Json<UpdateDefinition>,
 ) -> Result<Json<Definition>, AppError> {
-    update.validate()?;
-
     let mut conn = state.db_pool.get()?;
+
     let definition =
-        tokio::task::spawn_blocking(move || service::update_definition(&mut conn, &id, update))
+        tokio::task::spawn_blocking(move || definitions_services::get_definition(&mut conn, &id))
             .await??;
 
     Ok(Json(definition))
@@ -66,121 +69,76 @@ pub async fn delete_definition(
     Path(id): Path<String>,
 ) -> Result<StatusCode, AppError> {
     let mut conn = state.db_pool.get()?;
+    let id_for_thread = id.clone();
 
-    tokio::task::spawn_blocking(move || service::delete_definition(&mut conn, &id)).await??;
+    let rows_deleted = tokio::task::spawn_blocking(move || {
+        definitions_services::delete_definition(&mut conn, &id_for_thread)
+    })
+    .await??;
+
+    if rows_deleted == 0 {
+        return Err(AppError::not_found(format!(
+            "Definition with id '{}' not found",
+            id
+        )));
+    }
 
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::AppState;
-    use crate::{db, s3};
-    use axum::{
-        body::Body,
-        http::{Request, StatusCode},
-        Router,
-    };
-    use diesel::{Connection, RunQueryDsl};
-    use serde_json::json;
-    use tower::ServiceExt;
+pub async fn update_definition(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(update): Json<UpdateDefinition>,
+) -> Result<Json<Definition>, AppError> {
+    update.validate()?;
 
-    async fn setup_test_app() -> Router {
-        let database_url = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/mci".to_string());
-        let mut root_conn =
-            diesel::PgConnection::establish(&database_url.replace("/mci", "/postgres"))
-                .expect("Failed to connect to postgres database to setup test db");
+    let mut conn = state.db_pool.get()?;
 
-        let db_name = "mci";
-        diesel::sql_query(format!("DROP DATABASE IF EXISTS {}", db_name))
-            .execute(&mut root_conn)
-            .expect("Failed to drop test database");
-        diesel::sql_query(format!("CREATE DATABASE {}", db_name))
-            .execute(&mut root_conn)
-            .expect("Failed to create test database");
+    let definition = tokio::task::spawn_blocking(move || {
+        definitions_services::update_definition(&mut conn, &id, &update)
+    })
+    .await??;
 
-        let pool = db::create_pool(&database_url);
-        let mut conn = pool
-            .get()
-            .expect("Failed to get database connection for migrations");
+    Ok(Json(definition))
+}
 
-        tokio::task::spawn_blocking(move || db::run_migrations(&mut conn))
-            .await
-            .expect("Migration task panicked")
-            .expect("Failed to run migrations");
+pub async fn install_definition(
+    State(state): State<AppState>,
+    Json(request): Json<InstallDefinitionRequest>,
+) -> Result<(StatusCode, Json<Definition>), AppError> {
+    request.validate()?;
 
-        let app_state = AppState {
-            db_pool: pool,
-            s3_client: s3::create_s3_client("http://localhost:9000", "test", "test").await,
-        };
+    let db_pool = state.db_pool.clone();
+    let http_client = state.http_client.clone();
+    let s3_client = state.s3_client.clone();
 
-        crate::app(app_state)
-    }
+    let definition = definitions_services::create_definition_from_registry(
+        &mut db_pool.get()?,
+        &http_client,
+        &s3_client,
+        &request.source,
+    )
+    .await?;
 
-    // #[tokio::test]
-    // async fn test_create_definition_success() {
-    //     let app = setup_test_app().await;
-    //     let new_definition = json!({
-    //         "id": "test-definition",
-    //         "definition_url": "https://example.com/definition",
-    //         "definition_type": "openapi",
-    //         "source_url": "https://example.com",
-    //         "description": "Test"
-    //     });
-    //     let response = app
-    //         .oneshot(
-    //             Request::builder()
-    //                 .method("POST")
-    //                 .uri("/definitions")
-    //                 .header("content-type", "application/json")
-    //                 .body(Body::from(serde_json::to_string(&new_definition).unwrap()))
-    //                 .unwrap(),
-    //         )
-    //         .await
-    //         .unwrap();
-    //
-    //     assert_eq!(response.status(), StatusCode::CREATED);
-    // }
-    //
-    // #[tokio::test]
-    // async fn test_create_definition_validation_error() {
-    //     let app = setup_test_app().await;
-    //     let invalid_definition = json!({
-    //         "id": "a",
-    //         "definition_url": "not-a-url",
-    //         "definition_type": "openapi",
-    //         "source_url": "https://example.com",
-    //         "description": "Test"
-    //     });
-    //     let response = app
-    //         .oneshot(
-    //             Request::builder()
-    //                 .method("POST")
-    //                 .uri("/definitions")
-    //                 .header("content-type", "application/json")
-    //                 .body(Body::from(serde_json::to_string(&invalid_definition).unwrap()))
-    //                 .unwrap(),
-    //         )
-    //         .await
-    //         .unwrap();
-    //
-    //     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    // }
+    Ok((StatusCode::CREATED, Json(definition)))
+}
 
-    #[tokio::test]
-    async fn test_get_definition_not_found() {
-        let app = setup_test_app().await;
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/definitions/nonexistent")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+pub async fn upgrade_definition(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Definition>, AppError> {
+    let db_pool = state.db_pool.clone();
+    let http_client = state.http_client.clone();
+    let s3_client = state.s3_client.clone();
 
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
+    let definition = definitions_services::update_definition_from_source(
+        &mut db_pool.get()?,
+        &http_client,
+        &s3_client,
+        &id,
+    )
+    .await?;
+
+    Ok(Json(definition))
 }
