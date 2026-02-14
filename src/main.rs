@@ -1,4 +1,4 @@
-use mci::{config::Config, serve};
+use mci::{self, config::Config};
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
@@ -24,7 +24,7 @@ async fn main() {
         shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(30)));
     });
 
-    let (server_future, addr) = serve(&config, handle)
+    let (server_future, addr) = mci::serve(&config, handle)
         .await
         .expect("Failed to start server");
 

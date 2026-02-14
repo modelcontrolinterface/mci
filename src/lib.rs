@@ -1,7 +1,8 @@
-use aws_sdk_s3::Client;
+use aws_sdk_s3;
 use axum::Router;
 use axum_server::{tls_rustls::RustlsConfig, Handle};
 use futures::Future;
+use reqwest;
 use std::{net::SocketAddr, path::PathBuf};
 use tower_http::trace::TraceLayer;
 use tracing::{info, warn};
@@ -10,6 +11,7 @@ pub mod api;
 pub mod config;
 pub mod db;
 pub mod errors;
+pub mod http;
 pub mod models;
 pub mod s3;
 pub mod schema;
@@ -19,7 +21,8 @@ pub mod utils;
 #[derive(Clone)]
 pub struct AppState {
     pub db_pool: db::PgPool,
-    pub s3_client: Client,
+    pub http_client: reqwest::Client,
+    pub s3_client: aws_sdk_s3::Client,
 }
 
 pub fn app(app_state: AppState) -> Router {
@@ -37,21 +40,14 @@ pub async fn serve(
     Box<dyn std::error::Error>,
 > {
     let db_pool = db::create_pool(&config.database_url);
-    let s3_client =
-        s3::create_s3_client(&config.s3_url, &config.s3_access_key, &config.s3_secret_key).await;
+    let http_client = http::create_client(30)?;
+    let s3_client = s3::create_client(&config.s3_url, &config.s3_access_key, &config.s3_secret_key, &config.s3_region).await;
 
-    let mut conn = db_pool
-        .get()
-        .map_err(|e| format!("Failed to get database connection: {}", e))?;
-
-    tokio::task::spawn_blocking(move || db::run_migrations(&mut conn))
-        .await
-        .map_err(|e| format!("Migration task panicked: {}", e))?
-        .map_err(|e| format!("Failed to run migrations: {}", e))?;
-
-    info!("Database migrations completed successfully");
-
-    let app = app(AppState { db_pool, s3_client });
+    let app = app(AppState {
+        db_pool,
+        http_client,
+        s3_client,
+    });
 
     let addr: SocketAddr = config
         .address
