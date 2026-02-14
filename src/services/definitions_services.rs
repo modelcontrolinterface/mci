@@ -1,10 +1,10 @@
+use anyhow::{Context, Result};
 use crate::{
     db::DbConnection,
     models::{Definition, NewDefinition, UpdateDefinition},
     schema::definitions,
     utils::stream_utils,
 };
-use anyhow::{Context, Result};
 use aws_sdk_s3;
 use aws_smithy_types::byte_stream::ByteStream;
 use bytes::Bytes;
@@ -138,9 +138,7 @@ async fn s3_put_stream(
     if computed_hash != expected_hash {
         anyhow::bail!(
             "Digest mismatch: expected {}, got {}:{}",
-            expected_digest,
-            algorithm,
-            computed_hash
+            expected_digest, algorithm, computed_hash
         );
     }
 
@@ -264,13 +262,15 @@ pub async fn create_definition(
                 .context("Failed to fetch definition file from URL")?;
 
             let stream = response.bytes_stream();
-            let frames = stream.map_ok(|bytes| hyper::body::Frame::data(bytes));
+            let frames = stream.map_ok(hyper::body::Frame::data);
             let body = StreamBody::new(frames);
             ByteStream::from_body_1_x(body)
         }
-        DefinitionSource::File(path) => stream_utils::stream_content_from_path(path)
-            .await
-            .context("Failed to read definition file from path")?,
+        DefinitionSource::File(path) => {
+            stream_utils::stream_content_from_path(path)
+                .await
+                .context("Failed to read definition file from path")?
+        }
     };
 
     s3_put_stream(s3_client, &obj_key, body, &payload.digest)
@@ -291,7 +291,7 @@ pub async fn create_definition(
 
     db_create_definition(conn, &new_definition)
         .context("Failed to save definition to database")
-        .map_err(Into::into)
+
 }
 
 pub async fn create_definition_from_registry(
@@ -302,12 +302,16 @@ pub async fn create_definition_from_registry(
 ) -> Result<Definition> {
     let source_url = DefinitionSource::parse(source_input);
     let mut payload = match &source_url {
-        DefinitionSource::Http(url) => fetch_definition_from_url(http_client, url)
-            .await
-            .context("Failed to fetch definition metadata from registry")?,
-        DefinitionSource::File(path) => fetch_definition_from_path(path)
-            .await
-            .context("Failed to read definition metadata from file")?,
+        DefinitionSource::Http(url) => {
+            fetch_definition_from_url(http_client, url)
+                .await
+                .context("Failed to fetch definition metadata from registry")?
+        }
+        DefinitionSource::File(path) => {
+            fetch_definition_from_path(path)
+                .await
+                .context("Failed to read definition metadata from file")?
+        }
     };
 
     if payload.source_url.is_none() {
@@ -325,18 +329,21 @@ pub async fn update_definition_from_source(
 ) -> Result<Definition> {
     let definition = get_definition(conn, definition_id)
         .context("Failed to fetch current definition from database")?;
-    let source_url_str = definition
-        .source_url
+    let source_url_str = definition.source_url
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Definition does not have a source_url to update from"))?;
     let source = DefinitionSource::parse(source_url_str);
     let remote_payload = match &source {
-        DefinitionSource::Http(url) => fetch_definition_from_url(http_client, url)
-            .await
-            .context("Failed to fetch updated definition metadata from registry")?,
-        DefinitionSource::File(path) => fetch_definition_from_path(path)
-            .await
-            .context("Failed to read updated definition metadata from file")?,
+        DefinitionSource::Http(url) => {
+            fetch_definition_from_url(http_client, url)
+                .await
+                .context("Failed to fetch updated definition metadata from registry")?
+        }
+        DefinitionSource::File(path) => {
+            fetch_definition_from_path(path)
+                .await
+                .context("Failed to read updated definition metadata from file")?
+        }
     };
 
     if definition.digest == remote_payload.digest {
@@ -351,14 +358,16 @@ pub async fn update_definition_from_source(
                 .await
                 .context("Failed to fetch updated definition file from URL")?;
             let stream = response.bytes_stream();
-            let frames = stream.map_ok(|bytes| hyper::body::Frame::data(bytes));
+            let frames = stream.map_ok(hyper::body::Frame::data);
             let body = StreamBody::new(frames);
 
             ByteStream::from_body_1_x(body)
         }
-        DefinitionSource::File(path) => stream_utils::stream_content_from_path(path)
-            .await
-            .context("Failed to read updated definition file from path")?,
+        DefinitionSource::File(path) => {
+            stream_utils::stream_content_from_path(path)
+                .await
+                .context("Failed to read updated definition file from path")?
+        }
     };
 
     s3_put_stream(s3_client, &obj_key, body, &remote_payload.digest)
@@ -375,5 +384,5 @@ pub async fn update_definition_from_source(
 
     db_update_definition(conn, definition_id, &update_data)
         .context("Failed to update definition in database")
-        .map_err(Into::into)
+
 }
