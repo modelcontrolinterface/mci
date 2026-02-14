@@ -1,7 +1,4 @@
-use crate::{
-    schema::definitions,
-    utils::regex_utils::{NAMESPACE_ID_REGEX, SHA256_REGEX, TYPE_IDENTIFIER_REGEX},
-};
+use crate::{schema::definitions, utils::regex_utils};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -14,7 +11,7 @@ fn validate_digest(digest: &str) -> Result<(), ValidationError> {
         error
     })?;
     let hash_regex = match algorithm {
-        "sha256" => &SHA256_REGEX,
+        "sha256" => &regex_utils::SHA256,
         _ => {
             let mut error = ValidationError::new("unsupported_digest_algorithm");
             error.add_param(Cow::from("value"), &digest);
@@ -42,7 +39,9 @@ pub struct Definition {
     pub is_enabled: bool,
     pub name: String,
     pub description: String,
-    pub file_ref: String,
+    pub definition_object_key: String,
+    pub configuration_object_key: String,
+    pub secrets_object_key: String,
     pub digest: String,
     pub source_url: Option<String>,
 }
@@ -50,19 +49,23 @@ pub struct Definition {
 #[derive(Insertable, Deserialize, Validate, Debug)]
 #[diesel(table_name = definitions)]
 pub struct NewDefinition {
-    #[validate(length(min = 3, max=64), regex(path = *NAMESPACE_ID_REGEX))]
+    #[validate(length(min = 3, max = 64), regex(path = *regex_utils::NAMESPACE_ID))]
     pub id: String,
 
-    #[validate(length(min = 3, max=64), regex(path = *TYPE_IDENTIFIER_REGEX))]
+    #[validate(length(min = 3, max = 64), regex(path = *regex_utils::TYPE_IDENTIFIER))]
     pub type_: String,
-
-    pub file_ref: String,
 
     #[validate(length(min = 3, max = 64))]
     pub name: String,
 
     #[validate(length(max = 300))]
     pub description: String,
+
+    pub definition_object_key: String,
+
+    pub configuration_object_key: String,
+
+    pub secrets_object_key: String,
 
     #[validate(custom(function = "validate_digest"))]
     pub digest: String,
@@ -76,17 +79,17 @@ pub struct NewDefinition {
 pub struct UpdateDefinition {
     pub is_enabled: Option<bool>,
 
-    #[validate(length(min = 3, max=64), regex(path = *TYPE_IDENTIFIER_REGEX))]
+    #[validate(length(min = 3, max = 64), regex(path = *regex_utils::TYPE_IDENTIFIER))]
     pub type_: Option<String>,
 
     #[validate(length(min = 3, max = 64))]
-    pub name: String,
+    pub name: Option<String>,
 
     #[validate(length(max = 300))]
-    pub description: String,
+    pub description: Option<String>,
 
     #[validate(custom(function = "validate_digest"))]
-    pub digest: String,
+    pub digest: Option<String>,
 
     #[validate(url)]
     pub source_url: Option<String>,

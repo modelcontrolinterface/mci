@@ -4,7 +4,9 @@ CREATE TABLE definitions (
     is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     name VARCHAR(64) NOT NULL,
     description VARCHAR(500) NOT NULL,
-    file_ref TEXT NOT NULL,
+    definition_object_key TEXT NOT NULL,
+    configuration_object_key TEXT NOT NULL,
+    secrets_object_key TEXT NOT NULL,
     digest TEXT NOT NULL,
     source_url TEXT
 );

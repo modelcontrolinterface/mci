@@ -12,7 +12,9 @@ diesel::table! {
         name -> Varchar,
         #[max_length = 500]
         description -> Varchar,
-        file_ref -> Text,
+        definition_object_key -> Text,
+        configuration_object_key -> Text,
+        secrets_object_key -> Text,
         digest -> Text,
         source_url -> Nullable<Text>,
     }
