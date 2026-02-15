@@ -32,7 +32,9 @@ impl fmt::Display for AppError {
             AppError::Validation(err) => write!(f, "Validation error: {}", err),
 
             AppError::UnsupportedScheme(scheme) => write!(f, "Unsupported scheme: '{}'", scheme),
-            AppError::InvalidDefinitionSource(msg) => write!(f, "Invalid definition source: {}", msg),
+            AppError::InvalidDefinitionSource(msg) => {
+                write!(f, "Invalid definition source: {}", msg)
+            }
 
             AppError::Internal(err) => write!(f, "Internal error: {}", err),
             AppError::Database(err) => write!(f, "Database error: {}", err),
@@ -89,13 +91,16 @@ impl IntoResponse for AppError {
                 format_validation_errors(errors),
             ),
 
-            AppError::InvalidDefinitionSource(msg) => {
-                (StatusCode::BAD_REQUEST, "invalid_definition_source", msg.clone())
-            }
-            AppError::UnsupportedScheme(scheme) => {
-                (StatusCode::BAD_REQUEST, "unsupported_scheme",
-                 format!("Unsupported scheme: '{}'", scheme))
-            }
+            AppError::InvalidDefinitionSource(msg) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_definition_source",
+                msg.clone(),
+            ),
+            AppError::UnsupportedScheme(scheme) => (
+                StatusCode::BAD_REQUEST,
+                "unsupported_scheme",
+                format!("Unsupported scheme: '{}'", scheme),
+            ),
 
             AppError::Database(err) => {
                 tracing::error!("Database error: {:?}", err);
@@ -319,7 +324,10 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
         assert_eq!(json["error"]["type"], "invalid_definition_source");
-        assert!(json["error"]["message"].as_str().unwrap().contains("invalid://source"));
+        assert!(json["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("invalid://source"));
     }
 
     #[tokio::test]

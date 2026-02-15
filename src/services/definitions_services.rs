@@ -2,7 +2,7 @@ use crate::{
     db::DbConnection,
     models::{Definition, NewDefinition, UpdateDefinition},
     schema::definitions,
-    utils::{stream_utils, source_utils},
+    utils::{source_utils, stream_utils},
 };
 use anyhow::{Context, Result};
 use aws_sdk_s3;
@@ -55,10 +55,9 @@ pub struct DefinitionPayload {
 
 async fn fetch_definition_from_path(path: &str) -> Result<DefinitionPayload> {
     let resolved_path = match Url::parse(path) {
-        Ok(url) => {
-            url.to_file_path()
-                .map_err(|()| anyhow::anyhow!("Cannot convert file URL to path: {}", path))?
-        },
+        Ok(url) => url
+            .to_file_path()
+            .map_err(|()| anyhow::anyhow!("Cannot convert file URL to path: {}", path))?,
         Err(_) => Path::new(path).to_path_buf(),
     };
 
@@ -363,7 +362,10 @@ mod tests {
     use super::*;
     use std::fs::write;
     use tempfile::TempDir;
-    use wiremock::{ matchers::{method, path, header}, MockServer, Mock, ResponseTemplate};
+k::{
+        matchers::{header, method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
 
     #[cfg(test)]
     mod test_fetch_definition_from_path {
@@ -444,7 +446,10 @@ mod tests {
 
             let result = fetch_definition_from_path(file_path.to_str().unwrap()).await;
             assert!(result.is_err());
-            assert!(result.unwrap_err().to_string().contains("Failed to parse definition JSON"));
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to parse definition JSON"));
         }
 
         #[tokio::test]
@@ -471,7 +476,10 @@ mod tests {
 
             let result = fetch_definition_from_path(file_path.to_str().unwrap()).await;
             assert!(result.is_err());
-            assert!(result.unwrap_err().to_string().contains("Failed to parse definition JSON"));
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to parse definition JSON"));
         }
     }
 
@@ -565,7 +573,10 @@ mod tests {
 
             let result = fetch_definition_from_url(&client, &url).await;
             assert!(result.is_err());
-            assert!(result.unwrap_err().to_string().contains("Failed to parse definition JSON"));
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to parse definition JSON"));
         }
 
         #[tokio::test]
@@ -574,16 +585,23 @@ mod tests {
 
             let result = fetch_definition_from_url(&client, "not-a-valid-url").await;
             assert!(result.is_err());
-            assert!(result.unwrap_err().to_string().contains("Failed to send HTTP request"));
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to send HTTP request"));
         }
 
         #[tokio::test]
         async fn test_fetch_definition_from_url_connection_refused() {
             let client = reqwest::Client::new();
 
-            let result = fetch_definition_from_url(&client, "http://localhost:59999/definition.json").await;
+            let result =
+                fetch_definition_from_url(&client, "http://localhost:59999/definition.json").await;
             assert!(result.is_err());
-            assert!(result.unwrap_err().to_string().contains("Failed to send HTTP request"));
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to send HTTP request"));
         }
 
         #[tokio::test]
@@ -592,7 +610,9 @@ mod tests {
 
             Mock::given(method("GET"))
                 .and(path("/slow.json"))
-                .respond_with(ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(10)))
+                .respond_with(
+                    ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(10)),
+                )
                 .mount(&mock_server)
                 .await;
 
