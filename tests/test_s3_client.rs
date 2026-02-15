@@ -18,9 +18,14 @@ mod tests {
             "minioadmin",
             "minioadmin",
             "us-east-1",
-        ).await;
+        )
+        .await;
 
         let result = client.list_buckets().send().await;
-        assert!(result.is_ok(), "Failed to connect to MinIO: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to connect to MinIO: {:?}",
+            result.err()
+        );
     }
 }
