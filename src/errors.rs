@@ -15,7 +15,7 @@ pub enum AppError {
     Validation(ValidationErrors),
 
     UnsupportedScheme(String),
-    InvalidDefinitionSource(String),
+    InvalidSource(String),
 
     Internal(anyhow::Error),
     Pool(diesel::r2d2::PoolError),
@@ -32,8 +32,8 @@ impl fmt::Display for AppError {
             AppError::Validation(err) => write!(f, "Validation error: {}", err),
 
             AppError::UnsupportedScheme(scheme) => write!(f, "Unsupported scheme: '{}'", scheme),
-            AppError::InvalidDefinitionSource(msg) => {
-                write!(f, "Invalid definition source: {}", msg)
+            AppError::InvalidSource(msg) => {
+                write!(f, "Invalid  source: {}", msg)
             }
 
             AppError::Internal(err) => write!(f, "Internal error: {}", err),
@@ -91,11 +91,9 @@ impl IntoResponse for AppError {
                 format_validation_errors(errors),
             ),
 
-            AppError::InvalidDefinitionSource(msg) => (
-                StatusCode::BAD_REQUEST,
-                "invalid_definition_source",
-                msg.clone(),
-            ),
+            AppError::InvalidSource(msg) => {
+                (StatusCode::BAD_REQUEST, "invalid_source", msg.clone())
+            }
             AppError::UnsupportedScheme(scheme) => (
                 StatusCode::BAD_REQUEST,
                 "unsupported_scheme",
@@ -181,8 +179,8 @@ impl AppError {
         AppError::Internal(err.into())
     }
 
-    pub fn invalid_definition_source(msg: impl Into<String>) -> Self {
-        AppError::InvalidDefinitionSource(msg.into())
+    pub fn invalid_source(msg: impl Into<String>) -> Self {
+        AppError::InvalidSource(msg.into())
     }
 
     pub fn unsupported_scheme(scheme: impl Into<String>) -> Self {
@@ -313,8 +311,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_app_error_invalid_definition_source_response() {
-        let error = AppError::invalid_definition_source("invalid://source");
+    async fn test_app_error_invalid_source_response() {
+        let error = AppError::invalid_source("invalid://source");
         let response = error.into_response();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
@@ -323,7 +321,7 @@ mod tests {
         let bytes = body.collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
-        assert_eq!(json["error"]["type"], "invalid_definition_source");
+        assert_eq!(json["error"]["type"], "invalid_source");
         assert!(json["error"]["message"]
             .as_str()
             .unwrap()
@@ -346,10 +344,10 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_definition_source_display() {
-        let error = AppError::invalid_definition_source("bad-input");
+    fn test_invalid_source_display() {
+        let error = AppError::invalid_source("bad-input");
         let display = format!("{}", error);
-        assert!(display.contains("Invalid definition source"));
+        assert!(display.contains("Invalid  source"));
         assert!(display.contains("bad-input"));
     }
 
