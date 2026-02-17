@@ -8,19 +8,17 @@ pub async fn stream_content_from_url(
     url: &str,
 ) -> Result<reqwest::Response> {
     let response = http_client.get(url).send().await?.error_for_status()?;
-
     Ok(response)
 }
 
-pub async fn stream_content_from_path(path: &str) -> Result<ByteStream> {
-    Ok(ByteStream::from_path(Path::new(path)).await?)
+pub async fn stream_content_from_path(path: impl AsRef<Path>) -> Result<ByteStream> {
+    Ok(ByteStream::from_path(path).await?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[cfg(test)]
     mod http_tests {
         use super::*;
         use wiremock::matchers::{method, path};
@@ -58,7 +56,6 @@ mod tests {
         }
     }
 
-    #[cfg(test)]
     mod file_tests {
         use super::*;
         use std::io::Write;
@@ -69,8 +66,8 @@ mod tests {
             let mut file = NamedTempFile::new().unwrap();
             writeln!(file, "file content").unwrap();
 
-            let path = file.path().to_str().unwrap();
-            let stream = stream_content_from_path(path).await;
+            let path = file.path().to_path_buf();
+            let stream = stream_content_from_path(&path).await;
             assert!(stream.is_ok());
 
             let data = stream.unwrap().collect().await.unwrap().to_vec();
@@ -79,7 +76,7 @@ mod tests {
 
         #[tokio::test]
         async fn test_stream_path_missing_file() {
-            let res = stream_content_from_path("/non/existent/path/to/file.txt").await;
+            let res = stream_content_from_path("/NA.txt").await;
             assert!(res.is_err());
         }
     }

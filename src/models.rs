@@ -95,6 +95,13 @@ pub struct UpdateDefinition {
     pub source_url: Option<String>,
 }
 
+#[derive(Serialize)]
+pub struct Build {
+    pub id: i32,
+    pub name: String,
+    pub status: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
