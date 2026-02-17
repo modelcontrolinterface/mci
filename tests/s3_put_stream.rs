@@ -1,8 +1,8 @@
-use uuid::Uuid;
-use sha2::Digest;
 use anyhow::{Context, Result};
 use aws_smithy_types::byte_stream::ByteStream;
 use mci::s3::put_stream;
+use sha2::Digest;
+use uuid::Uuid;
 
 mod common;
 
@@ -50,12 +50,7 @@ async fn put_stream_validates_digest() -> Result<()> {
     )
     .await?;
 
-    let got = client
-        .get_object()
-        .bucket(&bucket)
-        .key(key)
-        .send()
-        .await?;
+    let got = client.get_object().bucket(&bucket).key(key).send().await?;
     let bytes = got.body.collect().await?.into_bytes();
     assert_eq!(bytes.as_ref(), content);
 

@@ -1,6 +1,9 @@
 use anyhow::Result;
 use mci::s3::create_client;
-use testcontainers_modules::{minio::MinIO, testcontainers::{runners::AsyncRunner, ContainerAsync}};
+use testcontainers_modules::{
+    minio::MinIO,
+    testcontainers::{runners::AsyncRunner, ContainerAsync},
+};
 
 pub async fn start_s3_server_and_client() -> Result<(ContainerAsync<MinIO>, aws_sdk_s3::Client)> {
     let container = MinIO::default().start().await?;

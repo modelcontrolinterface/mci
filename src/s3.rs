@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use aws_sdk_s3::{
     config::{Credentials, Region},
     primitives::ByteStream,
@@ -5,7 +6,6 @@ use aws_sdk_s3::{
 };
 use bytes::Bytes;
 use sha2::{Digest, Sha256};
-use anyhow::{Context, Result};
 
 pub async fn create_client(
     endpoint_url: &str,

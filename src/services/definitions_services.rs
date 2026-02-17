@@ -1,7 +1,7 @@
 use crate::{
-    s3,
     db::DbConnection,
     models::{Definition, NewDefinition, UpdateDefinition},
+    s3,
     schema::definitions,
     utils::{source_utils, stream_utils},
 };
@@ -205,9 +205,15 @@ pub async fn create_definition(
             .context("Failed to read definition file from path")?,
     };
 
-    s3::put_stream(s3_client, "definitions", &obj_key, body, Some(&payload.digest))
-        .await
-        .context("Failed to upload definition to S3")?;
+    s3::put_stream(
+        s3_client,
+        "definitions",
+        &obj_key,
+        body,
+        Some(&payload.digest),
+    )
+    .await
+    .context("Failed to upload definition to S3")?;
 
     let new_definition = NewDefinition {
         id: payload.id.clone(),
@@ -241,7 +247,6 @@ pub async fn create_definition_from_registry(
 
     create_definition(conn, http_client, s3_client, &payload).await
 }
-
 
 pub async fn update_definition_from_source(
     conn: &mut DbConnection,
@@ -282,9 +287,15 @@ pub async fn update_definition_from_source(
             .context("Failed to read updated definition file from path")?,
     };
 
-    s3::put_stream(s3_client, "definitions", &obj_key, body, Some(&remote_payload.digest))
-        .await
-        .context("Failed to upload updated definition to S3")?;
+    s3::put_stream(
+        s3_client,
+        "definitions",
+        &obj_key,
+        body,
+        Some(&remote_payload.digest),
+    )
+    .await
+    .context("Failed to upload updated definition to S3")?;
 
     let update_data = UpdateDefinition {
         type_: Some(remote_payload.r#type),
