@@ -13,9 +13,8 @@ impl Source {
     pub fn parse(input: &str) -> Result<Self, AppError> {
         if input.contains("://") {
             return Self::parse_url(input);
-        } else {
-            return Self::parse_file_path(input);
         }
+        Self::parse_file_path(input)
     }
 
     fn parse_url(input: &str) -> Result<Self, AppError> {
