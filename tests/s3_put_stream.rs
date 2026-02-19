@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use aws_smithy_types::byte_stream::ByteStream;
-use mci::s3::put_stream;
+use mci::s3;
 use sha2::Digest;
 use uuid::Uuid;
 
@@ -8,14 +8,14 @@ mod common;
 
 #[tokio::test]
 async fn put_stream_uploads_object() -> Result<()> {
-    let (container, client) = common::start_s3_server_and_client().await?;
+    let (container, client) = common::initialize_s3().await?;
     let bucket = format!("test-bucket-{}", Uuid::new_v4());
     client.create_bucket().bucket(&bucket).send().await?;
 
     let key = "hello.txt";
     let body = ByteStream::from_static(b"hello from put_stream");
 
-    put_stream(&client, &bucket, key, body, None).await?;
+    s3::put_stream(&client, &bucket, key, body, None).await?;
 
     let got = client
         .get_object()
@@ -33,7 +33,7 @@ async fn put_stream_uploads_object() -> Result<()> {
 
 #[tokio::test]
 async fn put_stream_validates_digest() -> Result<()> {
-    let (container, client) = common::start_s3_server_and_client().await?;
+    let (container, client) = common::initialize_s3().await?;
     let bucket = format!("test-bucket-{}", Uuid::new_v4());
     client.create_bucket().bucket(&bucket).send().await?;
 
@@ -41,7 +41,7 @@ async fn put_stream_validates_digest() -> Result<()> {
     let content = b"with digest check";
     let expected = format!("sha256:{:x}", sha2::Sha256::digest(content));
 
-    put_stream(
+    s3::put_stream(
         &client,
         &bucket,
         key,
@@ -60,14 +60,14 @@ async fn put_stream_validates_digest() -> Result<()> {
 
 #[tokio::test]
 async fn put_stream_rejects_bad_digest() -> Result<()> {
-    let (container, client) = common::start_s3_server_and_client().await?;
+    let (container, client) = common::initialize_s3().await?;
     let bucket = format!("test-bucket-{}", Uuid::new_v4());
     client.create_bucket().bucket(&bucket).send().await?;
 
     let key = "bad-digest.txt";
     let body = ByteStream::from_static(b"oops");
 
-    let result = put_stream(
+    let result = s3::put_stream(
         &client,
         &bucket,
         key,
@@ -84,14 +84,14 @@ async fn put_stream_rejects_bad_digest() -> Result<()> {
 
 #[tokio::test]
 async fn put_stream_errors_on_invalid_digest_format() -> Result<()> {
-    let (container, client) = common::start_s3_server_and_client().await?;
+    let (container, client) = common::initialize_s3().await?;
     let bucket = format!("test-bucket-{}", Uuid::new_v4());
     client.create_bucket().bucket(&bucket).send().await?;
 
     let key = "bad-format.txt";
     let body = ByteStream::from_static(b"content");
 
-    let result = put_stream(&client, &bucket, key, body, Some("badformat")).await;
+    let result = s3::put_stream(&client, &bucket, key, body, Some("badformat")).await;
 
     assert!(result.is_err(), "expected invalid digest format to error");
 
@@ -101,14 +101,14 @@ async fn put_stream_errors_on_invalid_digest_format() -> Result<()> {
 
 #[tokio::test]
 async fn put_stream_errors_on_unsupported_algorithm() -> Result<()> {
-    let (container, client) = common::start_s3_server_and_client().await?;
+    let (container, client) = common::initialize_s3().await?;
     let bucket = format!("test-bucket-{}", Uuid::new_v4());
     client.create_bucket().bucket(&bucket).send().await?;
 
     let key = "unsupported-algo.txt";
     let body = ByteStream::from_static(b"content");
 
-    let result = put_stream(&client, &bucket, key, body, Some("md5:abcd")).await;
+    let result = s3::put_stream(&client, &bucket, key, body, Some("md5:abcd")).await;
 
     assert!(result.is_err(), "expected unsupported algorithm to error");
 
@@ -118,14 +118,14 @@ async fn put_stream_errors_on_unsupported_algorithm() -> Result<()> {
 
 #[tokio::test]
 async fn put_stream_handles_empty_body() -> Result<()> {
-    let (container, client) = common::start_s3_server_and_client().await?;
+    let (container, client) = common::initialize_s3().await?;
     let bucket = format!("test-bucket-{}", Uuid::new_v4());
     client.create_bucket().bucket(&bucket).send().await?;
 
     let key = "empty.txt";
     let body = ByteStream::from_static(b"");
 
-    put_stream(&client, &bucket, key, body, None).await?;
+    s3::put_stream(&client, &bucket, key, body, None).await?;
 
     let got = client
         .get_object()

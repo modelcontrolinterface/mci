@@ -46,4 +46,4 @@ tempfile = "3.24"
 serial_test = "3.0"
 aws-smithy-types = { version = "1.0", features = ["test-util"] }
 aws-smithy-runtime = { version = "1.9", features = ["test-util", "client"] }
-testcontainers-modules = { version = "0.14", features = ["minio"] }
+testcontainers-modules = { version = "0.14", features = ["minio", "postgres"] }

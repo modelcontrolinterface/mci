@@ -118,6 +118,18 @@ pub fn get_definition(conn: &mut DbConnection, definition_id: &str) -> QueryResu
         .first(conn)
 }
 
+pub fn delete_definition(conn: &mut DbConnection, definition_id: &str) -> QueryResult<usize> {
+    diesel::delete(definitions::table.find(definition_id)).execute(conn)
+}
+
+pub fn update_definition(
+    conn: &mut DbConnection,
+    definition_id: &str,
+    update_definition: &UpdateDefinition,
+) -> QueryResult<Definition> {
+    db_update_definition(conn, definition_id, update_definition)
+}
+
 pub fn list_definitions(
     conn: &mut DbConnection,
     filter: &DefinitionFilter,
@@ -159,18 +171,6 @@ pub fn list_definitions(
     }
 
     query.select(Definition::as_select()).load(conn)
-}
-
-pub fn delete_definition(conn: &mut DbConnection, definition_id: &str) -> QueryResult<usize> {
-    diesel::delete(definitions::table.find(definition_id)).execute(conn)
-}
-
-pub fn update_definition(
-    conn: &mut DbConnection,
-    definition_id: &str,
-    update_definition: &UpdateDefinition,
-) -> QueryResult<Definition> {
-    db_update_definition(conn, definition_id, update_definition)
 }
 
 pub async fn create_definition(

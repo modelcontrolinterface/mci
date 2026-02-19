@@ -46,7 +46,7 @@ pub struct Definition {
     pub source_url: Option<String>,
 }
 
-#[derive(Insertable, Deserialize, Validate, Debug)]
+#[derive(Insertable, Deserialize, Validate)]
 #[diesel(table_name = definitions)]
 pub struct NewDefinition {
     #[validate(length(min = 3, max = 64), regex(path = *regex_utils::NAMESPACE_ID))]
@@ -74,7 +74,7 @@ pub struct NewDefinition {
     pub source_url: Option<String>,
 }
 
-#[derive(AsChangeset, Default, Deserialize, Validate, Debug)]
+#[derive(AsChangeset, Default, Deserialize, Validate)]
 #[diesel(table_name = definitions)]
 pub struct UpdateDefinition {
     pub is_enabled: Option<bool>,

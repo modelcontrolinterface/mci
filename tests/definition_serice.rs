@@ -435,7 +435,7 @@ async fn list_definitions_filters_and_sorting() -> Result<()> {
             diesel::update(definitions.find("b2"))
                 .set(is_enabled.eq(false))
                 .execute(&mut conn)?;
-                
+
             Ok(())
         }
     })
@@ -456,8 +456,6 @@ async fn list_definitions_filters_and_sorting() -> Result<()> {
         }
     })
     .await??;
-
-    println!("{:?}", by_query);
 
     assert_eq!(by_query.len(), 1);
     assert_eq!(by_query[0].id, "c3");
