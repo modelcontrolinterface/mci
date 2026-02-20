@@ -715,7 +715,7 @@ async fn install_and_upgrade_module_from_http_registry() -> Result<()> {
     assert_eq!(upgraded.digest, digest_v2);
     assert_eq!(upgraded.name, "Registry Module v2");
     assert_eq!(upgraded.description, "Module from registry v2");
-    assert!(matches!(upgraded.type_, ModuleType::Proxy));
+    assert!(matches!(upgraded.type_, ModuleType::Interceptor));
 
     pg_container.stop().await.ok();
     s3_container.stop().await.ok();

@@ -243,8 +243,6 @@ pub struct NewModule {
 pub struct UpdateModule {
     pub is_enabled: Option<bool>,
 
-    pub type_: Option<ModuleType>,
-
     #[validate(length(min = 3, max = 64))]
     pub name: Option<String>,
 
@@ -262,8 +260,6 @@ pub struct UpdateModule {
 #[validate(schema(function = "validate_module_update_request"))]
 pub struct UpdateModuleRequest {
     pub is_enabled: Option<bool>,
-
-    pub type_: Option<ModuleType>,
 
     #[validate(length(min = 3, max = 64))]
     pub name: Option<String>,
@@ -285,7 +281,6 @@ impl UpdateModuleRequest {
     pub fn into_changeset(self) -> UpdateModule {
         UpdateModule {
             is_enabled: self.is_enabled,
-            type_: self.type_,
             name: self.name,
             description: self.description,
             digest: self.digest,
