@@ -419,8 +419,8 @@ async fn create_get_update_delete_module_flow() -> Result<()> {
     let (pg_container, s3_container, app) = setup_app().await?;
 
     let temp_dir = tempfile::TempDir::new()?;
-    let file_path = temp_dir.path().join("module.json");
-    let file_body = br#"{\"hello\":\"module\"}"#;
+    let file_path = temp_dir.path().join("module.wasm");
+    let file_body = b"\0asm\x01\0\0\0";
 
     std::fs::write(&file_path, file_body)?;
 
@@ -536,11 +536,11 @@ async fn update_module_rejects_digest_without_file_url() -> Result<()> {
     let (pg_container, s3_container, app) = setup_app().await?;
 
     let mock = MockServer::start().await;
-    let file_body = b"some-module-content";
+    let file_body = b"\0asm\x01\0\0\0module";
     let digest = format!("sha256:{:x}", Sha256::digest(file_body));
 
     Mock::given(method("GET"))
-        .and(path("/module.json"))
+        .and(path("/module.wasm"))
         .respond_with(ResponseTemplate::new(200).set_body_raw(file_body, "application/json"))
         .mount(&mock)
         .await;
@@ -550,7 +550,7 @@ async fn update_module_rejects_digest_without_file_url() -> Result<()> {
         "name": "Module Update Test",
         "type": "sandbox",
         "description": "For module update validation",
-        "file_url": format!("{}/module.json", mock.uri()),
+        "file_url": format!("{}/module.wasm", mock.uri()),
         "digest": digest,
     });
 
@@ -586,17 +586,17 @@ async fn update_module_rejects_digest_without_file_url() -> Result<()> {
 
     assert_eq!(bad_resp.status(), StatusCode::BAD_REQUEST);
 
-    let new_body = b"module-new-content";
+    let new_body = b"\0asm\x01\0\0\0module2";
     let new_digest = format!("sha256:{:x}", Sha256::digest(new_body));
 
     Mock::given(method("GET"))
-        .and(path("/module2.json"))
+        .and(path("/module2.wasm"))
         .respond_with(ResponseTemplate::new(200).set_body_raw(new_body, "application/json"))
         .mount(&mock)
         .await;
 
     let good_patch = json!({
-        "file_url": format!("{}/module2.json", mock.uri()),
+        "file_url": format!("{}/module2.wasm", mock.uri()),
         "digest": new_digest,
     });
 
@@ -625,11 +625,11 @@ async fn install_and_upgrade_module_from_http_registry() -> Result<()> {
     let (pg_container, s3_container, app) = setup_app().await?;
 
     let mock = MockServer::start().await;
-    let mod_v1_body = b"module-v1-content";
+    let mod_v1_body = b"\0asm\x01\0\0\0v1";
     let digest_v1 = format!("sha256:{:x}", Sha256::digest(mod_v1_body));
 
     Mock::given(method("GET"))
-        .and(path("/mod_v1.json"))
+        .and(path("/mod_v1.wasm"))
         .respond_with(ResponseTemplate::new(200).set_body_raw(mod_v1_body, "application/json"))
         .mount(&mock)
         .await;
@@ -641,7 +641,7 @@ async fn install_and_upgrade_module_from_http_registry() -> Result<()> {
             "name": "Registry Module",
             "type": "interceptor",
             "description": "Module from registry",
-            "file_url": format!("{}/mod_v1.json", mock.uri()),
+            "file_url": format!("{}/mod_v1.wasm", mock.uri()),
             "digest": digest_v1,
             "source_url": null,
         })))
@@ -671,13 +671,13 @@ async fn install_and_upgrade_module_from_http_registry() -> Result<()> {
     assert_eq!(installed.id, "api-mod-2");
     assert_eq!(installed.source_url.as_deref(), Some(registry_url.as_str()));
 
-    let mod_v2_body = b"module-v2-content";
+    let mod_v2_body = b"\0asm\x01\0\0\0v2";
     let digest_v2 = format!("sha256:{:x}", Sha256::digest(mod_v2_body));
 
     mock.reset().await;
 
     Mock::given(method("GET"))
-        .and(path("/mod_v2.json"))
+        .and(path("/mod_v2.wasm"))
         .respond_with(ResponseTemplate::new(200).set_body_raw(mod_v2_body, "application/json"))
         .mount(&mock)
         .await;
@@ -689,7 +689,7 @@ async fn install_and_upgrade_module_from_http_registry() -> Result<()> {
             "name": "Registry Module v2",
             "type": "proxy",
             "description": "Module from registry v2",
-            "file_url": format!("{}/mod_v2.json", mock.uri()),
+            "file_url": format!("{}/mod_v2.wasm", mock.uri()),
             "digest": digest_v2.clone(),
             "source_url": null,
         })))

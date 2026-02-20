@@ -16,6 +16,13 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tokio::fs;
 
+fn ensure_wasm_file(file_url: &str) -> Result<()> {
+    if !file_url.to_lowercase().ends_with(".wasm") {
+        anyhow::bail!("Modules must reference a .wasm file");
+    }
+    Ok(())
+}
+
 #[derive(Debug, Deserialize)]
 pub enum SortBy {
     Id,
@@ -174,8 +181,9 @@ pub async fn create_module(
         anyhow::bail!("Conflict: Module with ID '{}' already exists", payload.id);
     }
 
+    ensure_wasm_file(&payload.file_url)?;
     let module_source = source_utils::Source::parse(&payload.file_url)?;
-    let obj_key = payload.id.clone();
+    let obj_key = format!("{}.wasm", payload.id);
 
     let body = match &module_source {
         source_utils::Source::Http(url) => {
@@ -251,8 +259,9 @@ pub async fn update_module_from_source(
         return Ok(module);
     }
 
+    ensure_wasm_file(&remote_payload.file_url)?;
     let module_file_source = source_utils::Source::parse(&remote_payload.file_url)?;
-    let obj_key = module.id.clone();
+    let obj_key = format!("{}.wasm", module.id);
     let body = match &module_file_source {
         source_utils::Source::Http(url) => {
             let response = stream_utils::stream_content_from_url(http_client, url)
