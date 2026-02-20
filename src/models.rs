@@ -67,7 +67,7 @@ pub struct NewDefinition {
     #[validate(length(min = 3, max = 64))]
     pub name: String,
 
-    #[validate(length(max = 300))]
+    #[validate(length(max = 500))]
     pub description: String,
 
     pub definition_object_key: String,
@@ -94,7 +94,7 @@ pub struct UpdateDefinition {
     #[validate(length(min = 3, max = 64))]
     pub name: Option<String>,
 
-    #[validate(length(max = 300))]
+    #[validate(length(max = 500))]
     pub description: Option<String>,
 
     #[validate(custom(function = "validate_digest"))]
@@ -115,7 +115,7 @@ pub struct UpdateDefinitionRequest {
     #[validate(length(min = 3, max = 64))]
     pub name: Option<String>,
 
-    #[validate(length(max = 300))]
+    #[validate(length(max = 500))]
     pub description: Option<String>,
 
     #[validate(url)]
